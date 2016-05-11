@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<html>
+<style>
+body, html, #map {
+  font-family:  Arial, Helvetica, sans-serif;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+path {
+  fill: #000;
+  fill-opacity: .2;
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+path:hover {
+  fill: red;
+  fill-opacity: .7;
+}
+
+div#pop-up {
+	display: none;
+	position:absolute;
+	color: white;
+	font-size: 14px;
+	background: rgba(0,0,0,0.5);
+	padding: 5px 10px 5px 10px;
+	-moz-border-radius: 5px 5px;
+	border-radius: 5px 5px;
+	z-index: 9999;
+}
+div#pop-up-title {
+	font-size: 15px;
+	width:300px;
+	margin-bottom: 4px;
+	font-weight: bolder;
+}
+div#pop-up-content {
+	font-size: 14px;
+}
+div#pop-desc {
+    margin-left: 10px;
+	width: 300px;
+}
+div#pop-img {
+	font-size: 30px;
+	font-weight: bolder;
+}
+</style>
+
+
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <title>D3.js and OpenLayers - Earthquakes (Points)</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/openlayers/2.13.1/theme/default/style.css" type="text/css">
+        <link rel="stylesheet" href="olstyle.css" type="text/css">
+        <link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.9.0/themes/blitzer/jquery-ui.css" type="text/css">
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" ></script>
+	<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.2/jquery-ui.min.js"></script>
+	<script src="http://d3js.org/d3.v2.min.js?2.9.3"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/openlayers/2.13.1/OpenLayers.js"></script>
+
+        <script type="text/javascript">
+          
+                var map;
+				function init() {
+                var extent = [-20037508.34, -20037508.34,
+                    20037508.34, 20037508.34
+                ];
+
+                map = new OpenLayers.Map('map', {
+                    numZoomLevels: 20,
+                    projection: new OpenLayers.Projection("EPSG:900913"),
+                    displayProjection: new OpenLayers.Projection("EPSG: 4326"),
+                    maxExtent: extent,
+                    restrictedExtent: extent,
+                    controls: [
+                        new OpenLayers.Control.Navigation(),
+                        new OpenLayers.Control.Zoom(),
+                        new OpenLayers.Control.ScaleLine(),
+                        new OpenLayers.Control.LayerSwitcher(),
+                        new OpenLayers.Control.MousePosition(),
+                        new OpenLayers.Control.KeyboardDefaults()
+                    ]
+                });
+
+                var ol_wms = new OpenLayers.Layer.OSM();
+                map.addLayers([ol_wms]);
+                map.setCenter(new OpenLayers.LonLat(8.5, 47.4).transform("EPSG:4326", "EPSG:900913"), 10);
+				
+				// load the first csv with the GPS coordinates
+				d3.csv("GPSTrack1.csv", function (data) {
+					
+					data.forEach(function(d) {
+                    d.Timestamp = d.timestamp;
+					d.Lat = +d.latitude;
+                    d.Lng = +d.longitude;
+                    console.log(d);
+  
+  });
+  
+                // load the second csv with the Sensor data
+                d3.csv("sensTrack1.csv", function (data) {
+					
+					data.forEach(function(d) {
+                    d.Sensor = +d.sensor_value0;
+                    d.Name = d.name;
+					console.log(d);
+  
+  });
+  
+  
+					var overlay = new OpenLayers.Layer.Vector("GPS - Sensor");
+
+                    // Add the container when the overlay is added to the map.
+                    overlay.afterAdd = function () {
+
+                        var div = d3.selectAll("#" + overlay.div.id);
+                        div.selectAll("svg").remove();
+                        var svg = div.append("svg");
+                        g = svg.append("g");
+
+                        var bounds = d3.geo.bounds(data),
+                            path = d3.geo.path().projection(project);
+
+                        var feature = g.selectAll("path")
+                            .data(data)
+                            .enter()
+							.append("path")
+                            .attr("d", function(d){path.pointRadius(d.Sensor); return path(d);})
+						    .on("mouseover", function (d) {
+                            
+						
+						// Add the mouse over effect.
+						var mousePosition = d3.svg.mouse(this);
+                        
+								$("#pop-up").fadeOut(100, function () {
+                                // Popup content
+                                $("#pop-up-title").html(d.Timestamp);
+								$("#pop-img").html(d.Sensor);
+                                $("#pop-desc").html(d.Name);
+
+                                // Popup position
+                                var popLeft = mousePosition[0] + 300 > screen.width ?
+                                    mousePosition[0] - 400 : mousePosition[0];
+                                var popTop = mousePosition[1];
+                                $("#pop-up").css({
+                                    "left": popLeft + 50,
+                                    "top": popTop
+                                });
+                                $("#pop-up").fadeIn(100);
+                            });
+                        }).
+                        on("mouseout", function () {
+                            $("#pop-up").fadeOut(50);
+                        });
+
+                        map.events.register("moveend", map, reset);
+
+                        reset();
+
+  	
+                        function reset() {
+
+                            var bottomLeft = project(bounds[0]),
+                                topRight = project(bounds[1]);
+                                	
+								// !!! Here is where I get the infinity error with height and width
+								svg.attr("width", topRight[0] - bottomLeft[0])
+                                .attr("height", bottomLeft[1] - topRight[1])
+                                .style("margin-left", bottomLeft[0] + "px")
+                                .style("margin-top", topRight[1] + "px");
+
+                                g.attr("transform", "translate(" + -bottomLeft[0] + "," + -topRight[1] + ")");
+
+                                feature.attr("d", path);
+										
+                        }
+
+                       function project(x) {
+                            var point = map.getViewPortPxFromLonLat(new OpenLayers.LonLat(x[0], x[1])
+                                .transform("EPSG:4326", "EPSG:900913"));
+                            return [point.x, point.y];
+                        }
+                    }
+
+                    map.addLayer(overlay);
+
+
+
+                })
+			  })};
+			 
+        </script>
+    </head>
+    <body onload="init()">
+
+        <div id="map"></div>
+		
+        <a href="#" id="permalink" onclick="drawSVG();return false;">Permalink</a>
+		<div id="pop-up">
+			<div id="pop-up-title"></div>
+			<div id="pop-up-content">
+				<table> <tr>
+					<td><div id="pop-img"></div></td>
+					<td><div id="pop-desc"></div></td>
+				</tr> </table>
+			</div>
+		</div>
+<div id="slider"></div>
+        <div id="docs"></div>
+    </body>
+</html>
